@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -12,6 +12,7 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  TextField,
   Table,
   TableHead,
   TableRow,
@@ -21,13 +22,33 @@ import {
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import InfoIcon from '@mui/icons-material/Info';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import SettingsIcon from '@mui/icons-material/Settings';
+import { getApiBaseUrl, setApiBaseUrl, checkSystemHealth } from '../api/client';
 
 interface HeaderProps {
   serverHealthy: boolean;
+  onEndpointChanged?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ serverHealthy }) => {
-  const [infoOpen, setInfoOpen] = React.useState(false);
+export const Header: React.FC<HeaderProps> = ({ serverHealthy, onEndpointChanged }) => {
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [customUrl, setCustomUrl] = useState(getApiBaseUrl());
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  const handleSaveEndpoint = async () => {
+    setApiBaseUrl(customUrl);
+    const healthy = await checkSystemHealth();
+    setTestResult(healthy ? 'Connected successfully!' : 'Connection failed. Check URL.');
+    if (onEndpointChanged) onEndpointChanged();
+  };
+
+  const handleResetEndpoint = () => {
+    setApiBaseUrl('');
+    setCustomUrl(getApiBaseUrl());
+    setTestResult('Reset to default URL.');
+    if (onEndpointChanged) onEndpointChanged();
+  };
 
   return (
     <>
@@ -83,19 +104,29 @@ export const Header: React.FC<HeaderProps> = ({ serverHealthy }) => {
 
           {/* Right Controls */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Chip
-              icon={<CheckCircleIcon style={{ color: serverHealthy ? '#137333' : '#d93025' }} />}
-              label={serverHealthy ? 'APIs Operational' : 'Offline / Reconnecting'}
-              size="small"
-              variant="outlined"
-              sx={{
-                borderColor: serverHealthy ? '#ceead6' : '#fad2cf',
-                backgroundColor: serverHealthy ? '#e6f4ea' : '#fce8e6',
-                color: serverHealthy ? '#137333' : '#d93025',
-                fontSize: '0.75rem',
-                display: { xs: 'none', sm: 'inline-flex' },
-              }}
-            />
+            <Tooltip title="Click to view/change Backend API URL">
+              <Chip
+                icon={<CheckCircleIcon style={{ color: serverHealthy ? '#137333' : '#d93025' }} />}
+                label={serverHealthy ? 'Backend Operational' : 'Offline / Reconnecting'}
+                size="small"
+                variant="outlined"
+                onClick={() => setSettingsOpen(true)}
+                sx={{
+                  borderColor: serverHealthy ? '#ceead6' : '#fad2cf',
+                  backgroundColor: serverHealthy ? '#e6f4ea' : '#fce8e6',
+                  color: serverHealthy ? '#137333' : '#d93025',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  display: { xs: 'none', sm: 'inline-flex' },
+                }}
+              />
+            </Tooltip>
+
+            <Tooltip title="Backend API Endpoint Settings">
+              <IconButton size="small" onClick={() => setSettingsOpen(true)} sx={{ color: '#5f6368' }}>
+                <SettingsIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
 
             <Tooltip title="View Risk & Load Weight Rules">
               <IconButton size="small" onClick={() => setInfoOpen(true)} sx={{ color: '#5f6368' }}>
@@ -105,6 +136,50 @@ export const Header: React.FC<HeaderProps> = ({ serverHealthy }) => {
           </Box>
         </Toolbar>
       </AppBar>
+
+      {/* Backend API Settings Dialog */}
+      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Backend API Connection Settings
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" sx={{ color: '#5f6368', mb: 2 }}>
+            Configure the Django REST Framework API base URL. Use this to switch between local development and cloud-hosted backend deployments (e.g. on Render).
+          </Typography>
+          <TextField
+            label="API Base URL"
+            fullWidth
+            size="small"
+            value={customUrl}
+            onChange={(e) => setCustomUrl(e.target.value)}
+            placeholder="http://127.0.0.1:8000/api or https://your-backend.onrender.com/api"
+            helperText="Default: http://127.0.0.1:8000/api (or VITE_API_BASE_URL env var)"
+            sx={{ mb: 2 }}
+          />
+          {testResult && (
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+                color: testResult.includes('successfully') ? '#137333' : '#d93025',
+              }}
+            >
+              {testResult}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleResetEndpoint} color="secondary">
+            Reset Default
+          </Button>
+          <Button onClick={handleSaveEndpoint} variant="contained" color="primary">
+            Test & Save
+          </Button>
+          <Button onClick={() => setSettingsOpen(false)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Assessment Risk Rules Dialog */}
       <Dialog open={infoOpen} onClose={() => setInfoOpen(false)} maxWidth="md" fullWidth>
