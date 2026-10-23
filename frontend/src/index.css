@@ -1,0 +1,40 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Roboto', 'Segoe UI', -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f8f9fa;
+  color: #202124;
+}
+
+/* Custom checkpoint pin styles */
+.custom-checkpoint-pin {
+  background: transparent;
+  border: none;
+}
+
+.custom-terminal-pin {
+  background: transparent;
+  border: none;
+}
+
+/* Ensure Leaflet pane z-indices play nice with MUI Dialogs and AppBars */
+.leaflet-pane {
+  z-index: 400 !important;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 500 !important;
+}
