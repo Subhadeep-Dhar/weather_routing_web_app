@@ -14,6 +14,7 @@ import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import AcUnitIcon from '@mui/icons-material/AcUnit';
 import ThermostatIcon from '@mui/icons-material/Thermostat';
 import SpeedIcon from '@mui/icons-material/Speed';
+import CloudQueueIcon from '@mui/icons-material/CloudQueue';
 import type { Checkpoint } from '../types/api';
 import { RISK_COLORS } from '../theme';
 
@@ -43,6 +44,9 @@ export const CheckpointDetails: React.FC<CheckpointDetailsProps> = ({
   const rainInHr = timelineItem ? timelineItem.rain_intensity_in_hr : checkpoint.weather.rain_intensity_in_hr;
   const snowInHr = timelineItem ? timelineItem.snow_intensity_in_hr : checkpoint.weather.snow_intensity_in_hr;
   const tempF = timelineItem ? timelineItem.temperature_f : checkpoint.weather.temperature_f;
+  const forecastTimestamp = timelineItem
+    ? timelineItem.timestamp
+    : checkpoint.weather.forecast_timestamp;
 
   const riskStyle = RISK_COLORS[effectiveRisk] || RISK_COLORS.Low;
 
@@ -90,7 +94,7 @@ export const CheckpointDetails: React.FC<CheckpointDetailsProps> = ({
         </IconButton>
       </Box>
 
-      {/* Metric summary */}
+      {/* Transit & ETA Metric summary */}
       <Box sx={{ display: 'flex', gap: 2, mb: 1.5, color: '#3c4043', flexWrap: 'wrap' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <SpeedIcon sx={{ fontSize: 16, color: '#5f6368' }} />
@@ -102,14 +106,42 @@ export const CheckpointDetails: React.FC<CheckpointDetailsProps> = ({
           Segment: <strong>{checkpoint.segment_distance_miles.toFixed(1)} mi</strong>
         </Typography>
         <Typography variant="body2" sx={{ color: '#5f6368' }}>
-          ETA: <strong>{new Date(checkpoint.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
+          Arrival ETA:{' '}
+          <strong>
+            {new Date(checkpoint.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </strong>
+        </Typography>
+      </Box>
+
+      {/* Data Source & Forecast Horizon Banner */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: 1.25,
+          py: 0.75,
+          mb: 1.5,
+          borderRadius: 2,
+          backgroundColor: '#f1f3f4',
+          color: '#3c4043',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <CloudQueueIcon fontSize="small" sx={{ color: '#1a73e8' }} />
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            Data Source: Open-Meteo Forecast Model
+          </Typography>
+        </Box>
+        <Typography variant="caption" sx={{ color: '#5f6368' }}>
+          Forecast Time: {forecastTimestamp.replace('T', ' ')}
         </Typography>
       </Box>
 
       {/* Cargo override banner if present */}
       {checkpoint.cargo_override_applied && (
         <Alert severity="warning" sx={{ py: 0.5, mb: 1.5, fontSize: '0.78rem' }}>
-          <strong>Cargo Override:</strong> {checkpoint.cargo_override_applied}
+          <strong>Cargo Override Applied:</strong> {checkpoint.cargo_override_applied}
         </Alert>
       )}
 
@@ -177,8 +209,8 @@ export const CheckpointDetails: React.FC<CheckpointDetailsProps> = ({
             <Typography variant="body2" sx={{ fontWeight: 700 }}>
               {tempF} °F
             </Typography>
-            <Typography variant="caption" sx={{ fontSize: '0.68rem', color: '#5f6368' }}>
-              Observed
+            <Typography variant="caption" sx={{ fontSize: '0.68rem', color: '#1a73e8', fontWeight: 600 }}>
+              ETA Forecast
             </Typography>
           </Box>
         </Grid>
