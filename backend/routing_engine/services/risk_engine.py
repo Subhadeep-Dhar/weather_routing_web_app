@@ -39,6 +39,7 @@ class RiskLevel(str, Enum):
     HIGH = "High"
     SEVERE = "Severe"
     NO_TRAVEL = "No Travel"
+    UNKNOWN = "Unknown"
 
 
 # Ordinal mapping for numeric average risk calculation
@@ -48,9 +49,11 @@ RISK_ORDINAL_MAP = {
     RiskLevel.HIGH: 3.0,
     RiskLevel.SEVERE: 4.0,
     RiskLevel.NO_TRAVEL: 5.0,
+    RiskLevel.UNKNOWN: 0.0,
 }
 
 ORDINAL_TO_RISK = {
+    0: RiskLevel.UNKNOWN,
     1: RiskLevel.LOW,
     2: RiskLevel.MODERATE,
     3: RiskLevel.HIGH,

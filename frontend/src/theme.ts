@@ -36,6 +36,13 @@ export const RISK_COLORS = {
     border: '#f2b8b5',
     label: 'No Travel Hazard',
   },
+  Unknown: {
+    main: '#5f6368',
+    light: '#f1f3f4',
+    contrastText: '#ffffff',
+    border: '#dadce0',
+    label: 'Data Unavailable',
+  },
 } as const;
 
 export const theme = createTheme({

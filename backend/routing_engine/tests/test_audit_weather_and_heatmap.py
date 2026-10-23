@@ -45,8 +45,9 @@ class TestMissingForecastData:
     def test_empty_checkpoints_returns_empty(self):
         assert enrich_checkpoints_with_weather([], cargo_weight_lbs=42000, departure_time_iso="2026-10-24T08:00:00Z") == []
 
-    def test_graceful_fallback_when_weather_unavailable(self):
-        # Synthetic checkpoint with no live external connection or malformed input
+    def test_missing_weather_evaluates_to_unknown_not_silently_low(self):
+        from unittest.mock import patch
+        # Synthetic checkpoint with no live external connection or cached weather
         checkpoints = [
             {
                 "index": 0,
@@ -58,14 +59,52 @@ class TestMissingForecastData:
                 "elapsed_hours": 0.0,
             }
         ]
-        # Should execute safely without raising exceptions and populate fallback weather
-        res = enrich_checkpoints_with_weather(checkpoints, cargo_weight_lbs=42000, departure_time_iso="2026-10-24T08:00:00Z")
-        assert len(res) == 1
-        cp = res[0]
-        assert "weather" in cp
-        assert "wind_speed_mph" in cp["weather"]
-        assert "effective_risk" in cp
-        assert cp["effective_risk"] in [r.value for r in RiskLevel]
+        with patch("routing_engine.services.weather.cache.get", return_value=[]), \
+             patch("routing_engine.services.weather.requests.get", side_effect=Exception("API offline")):
+            res = enrich_checkpoints_with_weather(checkpoints, cargo_weight_lbs=42000, departure_time_iso="2026-10-24T08:00:00Z")
+            assert len(res) == 1
+            cp = res[0]
+            assert "weather" in cp
+            # Crucial safety check: missing forecast data must be explicitly represented as Unknown, not silently Low risk
+            assert cp["effective_risk"] == RiskLevel.UNKNOWN.value
+            assert cp["effective_risk"] != RiskLevel.LOW.value
+            assert cp["weather"]["data_status"] == "missing"
+            assert cp["weather"]["forecast_timestamp"] == "Unavailable"
+
+    def test_out_of_range_eta_evaluates_to_unknown(self):
+        from unittest.mock import patch
+        # Mock weather provider returning a 3-day window from Oct 24 to Oct 27
+        mock_raw = [
+            {
+                "hourly": {
+                    "time": ["2026-10-24T00:00", "2026-10-24T01:00", "2026-10-27T00:00"],
+                    "temperature_2m": [50.0, 50.0, 50.0],
+                    "precipitation": [0.0, 0.0, 0.0],
+                    "snowfall": [0.0, 0.0, 0.0],
+                    "wind_speed_10m": [5.0, 5.0, 5.0],
+                }
+            }
+        ]
+        # ETA is Nov 10, 2026 (two weeks beyond forecast horizon)
+        checkpoints = [
+            {
+                "index": 0,
+                "distance_from_origin_miles": 0.0,
+                "segment_distance_miles": 10.0,
+                "lat": 37.0,
+                "lon": -107.0,
+                "eta": "2026-11-10T12:00:00Z",
+                "elapsed_hours": 0.0,
+            }
+        ]
+        with patch("routing_engine.services.weather.cache.get", return_value=mock_raw):
+            res = enrich_checkpoints_with_weather(checkpoints, cargo_weight_lbs=42000, departure_time_iso="2026-10-24T00:00:00Z")
+            assert len(res) == 1
+            cp = res[0]
+            # Must not silently use the nearest hour and classify as Low
+            assert cp["effective_risk"] == RiskLevel.UNKNOWN.value
+            assert cp["effective_risk"] != RiskLevel.LOW.value
+            assert cp["weather"]["data_status"] == "out_of_range"
 
 
 class TestDistanceWeightedAverageRisk:

@@ -145,6 +145,13 @@ export const CheckpointDetails: React.FC<CheckpointDetailsProps> = ({
         </Alert>
       )}
 
+      {/* Forecast unavailable notice if Unknown */}
+      {effectiveRisk === 'Unknown' && (
+        <Alert severity="info" sx={{ py: 0.5, mb: 1.5, fontSize: '0.78rem' }}>
+          <strong>Forecast Notice:</strong> Hourly weather forecast is unavailable or out-of-range for this ETA. Exercise caution.
+        </Alert>
+      )}
+
       {/* Weather conditions grid */}
       <Grid container spacing={1}>
         <Grid size={{ xs: 6, sm: 3 }}>

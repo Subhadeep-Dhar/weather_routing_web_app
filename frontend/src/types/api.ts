@@ -10,6 +10,7 @@ export interface WeatherDetails {
   snow_intensity_in_hr: number;
   temperature_f: number;
   forecast_timestamp: string;
+  data_status?: "available" | "missing" | "out_of_range";
 }
 
 export interface HazardClassifications {
@@ -26,7 +27,7 @@ export interface HourlyTimelineItem {
   rain_intensity_in_hr: number;
   snow_intensity_in_hr: number;
   temperature_f: number;
-  effective_risk: "Low" | "Moderate" | "High" | "Severe" | "No Travel";
+  effective_risk: "Low" | "Moderate" | "High" | "Severe" | "No Travel" | "Unknown";
   risk_score: number;
 }
 
@@ -41,7 +42,7 @@ export interface Checkpoint {
   weather: WeatherDetails;
   hazard_classifications: HazardClassifications;
   cargo_override_applied: string | null;
-  effective_risk: "Low" | "Moderate" | "High" | "Severe" | "No Travel";
+  effective_risk: "Low" | "Moderate" | "High" | "Severe" | "No Travel" | "Unknown";
   risk_score: number;
   timeline_48h: HourlyTimelineItem[];
 }
@@ -52,6 +53,7 @@ export interface RiskMileage {
   high_miles: number;
   severe_miles: number;
   no_travel_miles: number;
+  unknown_miles?: number;
   total_accounted_miles: number;
 }
 

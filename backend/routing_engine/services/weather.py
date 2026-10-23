@@ -25,6 +25,19 @@ def _parse_iso_to_dt(iso_str: str) -> datetime:
         return datetime.now(timezone.utc)
 
 
+def _is_forecast_in_range(target_dt: datetime, forecast_times: List[str], max_diff_hours: float = 3.0) -> bool:
+    """Checks whether target_dt is within acceptable distance to available forecast times."""
+    if not forecast_times:
+        return False
+    try:
+        start_dt = datetime.fromisoformat(forecast_times[0]).replace(tzinfo=timezone.utc)
+        end_dt = datetime.fromisoformat(forecast_times[-1]).replace(tzinfo=timezone.utc)
+        margin = timedelta(hours=max_diff_hours)
+        return (start_dt - margin) <= target_dt <= (end_dt + margin)
+    except Exception:
+        return False
+
+
 def _find_nearest_hour_index(target_dt: datetime, forecast_times: List[str]) -> int:
     """Finds the index of the forecast time closest to the target datetime."""
     if not forecast_times:
@@ -99,6 +112,8 @@ def enrich_checkpoints_with_weather(
 
     dep_dt = _parse_iso_to_dt(departure_time_iso)
 
+    from .risk_engine import RiskLevel
+
     enriched = []
     for idx, cp in enumerate(checkpoints):
         # Match weather result for this checkpoint
@@ -115,25 +130,58 @@ def enrich_checkpoints_with_weather(
         winds = hourly.get("wind_speed_10m", [])
 
         cp_eta_dt = _parse_iso_to_dt(cp.get("eta", departure_time_iso))
+        in_range = _is_forecast_in_range(cp_eta_dt, times)
+        has_arrays = bool(times and winds and precips and snows and temps)
+
         nearest_idx = _find_nearest_hour_index(cp_eta_dt, times) if times else 0
 
-        wind_val = float(winds[nearest_idx]) if winds and nearest_idx < len(winds) else 5.0
-        rain_val = float(precips[nearest_idx]) if precips and nearest_idx < len(precips) else 0.0
-        snow_val = float(snows[nearest_idx]) if snows and nearest_idx < len(snows) else 0.0
-        temp_val = float(temps[nearest_idx]) if temps and nearest_idx < len(temps) else 55.0
+        if has_arrays and in_range and nearest_idx < len(winds) and nearest_idx < len(precips) and nearest_idx < len(snows) and nearest_idx < len(temps):
+            wind_val = float(winds[nearest_idx])
+            rain_val = float(precips[nearest_idx])
+            snow_val = float(snows[nearest_idx])
+            temp_val = float(temps[nearest_idx])
+            risk_eval = evaluate_checkpoint_risk(wind_val, rain_val, snow_val, cargo_weight_lbs)
 
-        risk_eval = evaluate_checkpoint_risk(wind_val, rain_val, snow_val, cargo_weight_lbs)
+            effective_risk = risk_eval["effective_risk"]
+            risk_score = risk_eval["risk_score"]
+            cargo_override = risk_eval["cargo_override_reason"]
+            hazard_classifications = {
+                "wind": risk_eval["raw_wind_risk"],
+                "effective_wind": risk_eval["effective_wind_risk"],
+                "rain": risk_eval["rain_risk"],
+                "snow": risk_eval["snow_risk"],
+            }
+            data_status = "available"
+            forecast_ts = times[nearest_idx]
+        else:
+            # Forecast is missing, incomplete, or out-of-range -> MUST NOT SILENTLY BECOME LOW RISK
+            effective_risk = RiskLevel.UNKNOWN.value
+            risk_score = 0.0
+            data_status = "out_of_range" if times else "missing"
+            cargo_override = f"Forecast {data_status} at checkpoint ETA"
+            hazard_classifications = {
+                "wind": RiskLevel.UNKNOWN.value,
+                "effective_wind": RiskLevel.UNKNOWN.value,
+                "rain": RiskLevel.UNKNOWN.value,
+                "snow": RiskLevel.UNKNOWN.value,
+            }
+            wind_val = 0.0
+            rain_val = 0.0
+            snow_val = 0.0
+            temp_val = 0.0
+            forecast_ts = "Unavailable"
 
         # Build 0-48h timeline for this checkpoint (enabling instant slider scrubbing on frontend)
         timeline = []
-        dep_hour_idx = _find_nearest_hour_index(dep_dt, times) if times else 0
+        dep_in_range = _is_forecast_in_range(dep_dt, times)
+        dep_hour_idx = _find_nearest_hour_index(dep_dt, times) if (times and dep_in_range) else 0
         for h in range(49):  # 0 to 48 hours
             f_idx = dep_hour_idx + h
-            if times and f_idx < len(times):
-                h_wind = float(winds[f_idx]) if winds and f_idx < len(winds) else 5.0
-                h_rain = float(precips[f_idx]) if precips and f_idx < len(precips) else 0.0
-                h_snow = float(snows[f_idx]) if snows and f_idx < len(snows) else 0.0
-                h_temp = float(temps[f_idx]) if temps and f_idx < len(temps) else 55.0
+            if times and dep_in_range and f_idx < len(times) and f_idx < len(winds) and f_idx < len(precips) and f_idx < len(snows) and f_idx < len(temps):
+                h_wind = float(winds[f_idx])
+                h_rain = float(precips[f_idx])
+                h_snow = float(snows[f_idx])
+                h_temp = float(temps[f_idx])
                 h_risk = evaluate_checkpoint_risk(h_wind, h_rain, h_snow, cargo_weight_lbs)
 
                 timeline.append({
@@ -146,6 +194,17 @@ def enrich_checkpoints_with_weather(
                     "effective_risk": h_risk["effective_risk"],
                     "risk_score": h_risk["risk_score"],
                 })
+            else:
+                timeline.append({
+                    "hour_offset": h,
+                    "timestamp": "Unavailable",
+                    "wind_speed_mph": 0.0,
+                    "rain_intensity_in_hr": 0.0,
+                    "snow_intensity_in_hr": 0.0,
+                    "temperature_f": 0.0,
+                    "effective_risk": RiskLevel.UNKNOWN.value,
+                    "risk_score": 0.0,
+                })
 
         cp_copy = dict(cp)
         cp_copy["weather"] = {
@@ -153,17 +212,13 @@ def enrich_checkpoints_with_weather(
             "rain_intensity_in_hr": round(rain_val, 2),
             "snow_intensity_in_hr": round(snow_val, 2),
             "temperature_f": round(temp_val, 1),
-            "forecast_timestamp": times[nearest_idx] if times and nearest_idx < len(times) else cp["eta"],
+            "forecast_timestamp": forecast_ts,
+            "data_status": data_status,
         }
-        cp_copy["hazard_classifications"] = {
-            "wind": risk_eval["raw_wind_risk"],
-            "effective_wind": risk_eval["effective_wind_risk"],
-            "rain": risk_eval["rain_risk"],
-            "snow": risk_eval["snow_risk"],
-        }
-        cp_copy["cargo_override_applied"] = risk_eval["cargo_override_reason"]
-        cp_copy["effective_risk"] = risk_eval["effective_risk"]
-        cp_copy["risk_score"] = risk_eval["risk_score"]
+        cp_copy["hazard_classifications"] = hazard_classifications
+        cp_copy["cargo_override_applied"] = cargo_override
+        cp_copy["effective_risk"] = effective_risk
+        cp_copy["risk_score"] = risk_score
         cp_copy["timeline_48h"] = timeline
 
         enriched.append(cp_copy)

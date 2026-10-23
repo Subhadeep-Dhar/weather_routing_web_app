@@ -64,6 +64,11 @@ export const WeatherHeatmap: React.FC<WeatherHeatmapProps> = ({
             ? cp.timeline_48h[hourOffset]
             : null;
 
+        const effectiveRisk = timelineItem ? timelineItem.effective_risk : cp.effective_risk;
+        if (effectiveRisk === 'Unknown') {
+          return null;
+        }
+
         const wind = timelineItem ? timelineItem.wind_speed_mph : cp.weather.wind_speed_mph;
         const rain = timelineItem ? timelineItem.rain_intensity_in_hr : cp.weather.rain_intensity_in_hr;
         const snow = timelineItem ? timelineItem.snow_intensity_in_hr : cp.weather.snow_intensity_in_hr;

@@ -26,6 +26,7 @@ def calculate_route_metrics(route_id: str, name: str, distance_miles: float, dur
     high_miles = 0.0
     sev_miles = 0.0
     no_travel_miles = 0.0
+    unknown_miles = 0.0
 
     weighted_risk_sum = 0.0
     total_segment_dist = 0.0
@@ -39,32 +40,42 @@ def calculate_route_metrics(route_id: str, name: str, distance_miles: float, dur
         risk_score = cp.get("risk_score", 1.0)
 
         total_segment_dist += seg_dist
-        weighted_risk_sum += (seg_dist * risk_score)
 
         if risk_str == RiskLevel.NO_TRAVEL.value:
             no_travel_miles += seg_dist
             has_no_travel = True
             highest_severity_encountered = RiskLevel.NO_TRAVEL
+            weighted_risk_sum += (seg_dist * risk_score)
         elif risk_str == RiskLevel.SEVERE.value:
             sev_miles += seg_dist
             if highest_severity_encountered != RiskLevel.NO_TRAVEL:
                 highest_severity_encountered = RiskLevel.SEVERE
+            weighted_risk_sum += (seg_dist * risk_score)
         elif risk_str == RiskLevel.HIGH.value:
             high_miles += seg_dist
-            if highest_severity_encountered in [RiskLevel.LOW, RiskLevel.MODERATE]:
+            if highest_severity_encountered in [RiskLevel.LOW, RiskLevel.MODERATE, RiskLevel.UNKNOWN]:
                 highest_severity_encountered = RiskLevel.HIGH
+            weighted_risk_sum += (seg_dist * risk_score)
         elif risk_str == RiskLevel.MODERATE.value:
             mod_miles += seg_dist
-            if highest_severity_encountered == RiskLevel.LOW:
+            if highest_severity_encountered in [RiskLevel.LOW, RiskLevel.UNKNOWN]:
                 highest_severity_encountered = RiskLevel.MODERATE
+            weighted_risk_sum += (seg_dist * risk_score)
+        elif risk_str == RiskLevel.UNKNOWN.value:
+            unknown_miles += seg_dist
+            if highest_severity_encountered == RiskLevel.LOW:
+                highest_severity_encountered = RiskLevel.UNKNOWN
+            # Unknown miles do not contribute to evaluated hazard risk sum
         else:
             low_miles += seg_dist
+            weighted_risk_sum += (seg_dist * risk_score)
 
-    # Distance-weighted average risk score
-    avg_risk_score = round(weighted_risk_sum / total_segment_dist, 2) if total_segment_dist > 0 else 1.0
+    # Distance-weighted average risk score over evaluated segments
+    evaluated_dist = total_segment_dist - unknown_miles
+    avg_risk_score = round(weighted_risk_sum / evaluated_dist, 2) if evaluated_dist > 0 else 0.0
 
     # Ensure total accounted miles equals distance_miles
-    total_accounted = round(low_miles + mod_miles + high_miles + sev_miles + no_travel_miles, 2)
+    total_accounted = round(low_miles + mod_miles + high_miles + sev_miles + no_travel_miles + unknown_miles, 2)
 
     return {
         "route_id": route_id,
@@ -82,6 +93,7 @@ def calculate_route_metrics(route_id: str, name: str, distance_miles: float, dur
             "high_miles": round(high_miles, 1),
             "severe_miles": round(sev_miles, 1),
             "no_travel_miles": round(no_travel_miles, 1),
+            "unknown_miles": round(unknown_miles, 1),
             "total_accounted_miles": total_accounted,
         },
         "average_risk_score": avg_risk_score,
@@ -105,14 +117,15 @@ def rank_and_recommend_routes(routes: List[Dict[str, Any]]) -> List[Dict[str, An
     if not routes:
         return []
 
-    def sort_key(r: Dict[str, Any]) -> Tuple[int, float, float, float, float]:
+    def sort_key(r: Dict[str, Any]) -> Tuple[int, float, float, float, float, float]:
         # Flag 0 for safe (no travel == 0), 1 for unsafe
         safety_flag = 1 if r["has_no_travel"] else 0
         sev = r["risk_mileage"]["severe_miles"]
         high = r["risk_mileage"]["high_miles"]
         avg_risk = r["average_risk_score"]
+        unk = r["risk_mileage"].get("unknown_miles", 0.0)
         dur = r["duration_hours"]
-        return (safety_flag, sev, high, avg_risk, dur)
+        return (safety_flag, sev, high, avg_risk, unk, dur)
 
     sorted_routes = sorted(routes, key=sort_key)
 

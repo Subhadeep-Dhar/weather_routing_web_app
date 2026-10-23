@@ -43,7 +43,7 @@ const FitRouteBounds: React.FC<{ coordinates: [number, number][] }> = ({ coordin
 // Create custom circular DivIcon for checkpoints
 function createCheckpointIcon(
   index: number,
-  effectiveRisk: 'Low' | 'Moderate' | 'High' | 'Severe' | 'No Travel',
+  effectiveRisk: 'Low' | 'Moderate' | 'High' | 'Severe' | 'No Travel' | 'Unknown',
   isSelected: boolean
 ): L.DivIcon {
   const style = RISK_COLORS[effectiveRisk] || RISK_COLORS.Low;
