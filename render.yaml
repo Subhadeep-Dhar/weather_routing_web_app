@@ -1,0 +1,32 @@
+services:
+  # Django REST Framework Backend Service (Free Tier)
+  - type: web
+    name: spotter-safe-route-backend
+    env: python
+    region: ohio
+    plan: free
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn spotter_routing.wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+      - key: DJANGO_ALLOWED_HOSTS
+        value: "*"
+      - key: CORS_ALLOW_ALL_ORIGINS
+        value: "True"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+
+  # Vite React Frontend Static Site (Free Tier)
+  - type: static_site
+    name: spotter-safe-route-frontend
+    region: ohio
+    plan: free
+    rootDir: frontend
+    buildCommand: "npm install && npm run build"
+    publishPath: "dist"
+    routes:
+      - type: rewrite
+        source: "/*"
+        destination: "/index.html"
