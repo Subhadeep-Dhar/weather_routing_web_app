@@ -7,7 +7,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
-    startCommand: "gunicorn spotter_routing.wsgi:application"
+    startCommand: "gunicorn spotter_routing.wsgi:application --bind 0.0.0.0:$PORT"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.8
@@ -26,6 +26,9 @@ services:
     rootDir: frontend
     buildCommand: "npm install && npm run build"
     publishPath: "dist"
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: "https://spotter-safe-route-backend.onrender.com/api"
     routes:
       - type: rewrite
         source: "/*"

@@ -8,9 +8,13 @@ export function getApiBaseUrl(): string {
       return custom.trim().replace(/\/+$/, '');
     }
   }
-  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  const envUrl = import.meta.env.VITE_API_BASE_URL || (import.meta.env as Record<string, string | undefined>).VITE_API_URL;
   if (envUrl && envUrl.trim()) {
     return envUrl.trim().replace(/\/+$/, '');
+  }
+  // When running on a remote/hosted domain (e.g. Render, Vercel), call the deployed backend
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return 'https://spotter-safe-route-backend.onrender.com/api';
   }
   return 'http://127.0.0.1:8000/api';
 }
