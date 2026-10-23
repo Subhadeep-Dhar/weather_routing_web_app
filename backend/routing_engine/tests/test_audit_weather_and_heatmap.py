@@ -65,9 +65,10 @@ class TestMissingForecastData:
             assert len(res) == 1
             cp = res[0]
             assert "weather" in cp
-            # Crucial safety check: missing forecast data must be explicitly represented as Unknown, not silently Low risk
             assert cp["effective_risk"] == RiskLevel.UNKNOWN.value
             assert cp["effective_risk"] != RiskLevel.LOW.value
+            assert cp["risk_score"] is None
+            assert cp["weather"]["wind_speed_mph"] is None
             assert cp["weather"]["data_status"] == "missing"
             assert cp["weather"]["forecast_timestamp"] == "Unavailable"
 
@@ -104,6 +105,8 @@ class TestMissingForecastData:
             # Must not silently use the nearest hour and classify as Low
             assert cp["effective_risk"] == RiskLevel.UNKNOWN.value
             assert cp["effective_risk"] != RiskLevel.LOW.value
+            assert cp["risk_score"] is None
+            assert cp["weather"]["wind_speed_mph"] is None
             assert cp["weather"]["data_status"] == "out_of_range"
 
 

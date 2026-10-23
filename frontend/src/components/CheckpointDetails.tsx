@@ -163,7 +163,7 @@ export const CheckpointDetails: React.FC<CheckpointDetailsProps> = ({
               </Typography>
             </Box>
             <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {windMph} mph
+              {windMph !== null && windMph !== undefined ? `${windMph} mph` : 'N/A'}
             </Typography>
             <Typography variant="caption" sx={{ fontSize: '0.68rem', color: '#5f6368' }}>
               Class: {checkpoint.hazard_classifications.effective_wind}
@@ -180,7 +180,7 @@ export const CheckpointDetails: React.FC<CheckpointDetailsProps> = ({
               </Typography>
             </Box>
             <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {rainInHr} in/hr
+              {rainInHr !== null && rainInHr !== undefined ? `${rainInHr} in/hr` : 'N/A'}
             </Typography>
             <Typography variant="caption" sx={{ fontSize: '0.68rem', color: '#5f6368' }}>
               Class: {checkpoint.hazard_classifications.rain}
@@ -197,7 +197,7 @@ export const CheckpointDetails: React.FC<CheckpointDetailsProps> = ({
               </Typography>
             </Box>
             <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {snowInHr} in/hr
+              {snowInHr !== null && snowInHr !== undefined ? `${snowInHr} in/hr` : 'N/A'}
             </Typography>
             <Typography variant="caption" sx={{ fontSize: '0.68rem', color: '#5f6368' }}>
               Class: {checkpoint.hazard_classifications.snow}
@@ -214,7 +214,7 @@ export const CheckpointDetails: React.FC<CheckpointDetailsProps> = ({
               </Typography>
             </Box>
             <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {tempF} °F
+              {tempF !== null && tempF !== undefined ? `${tempF} °F` : 'N/A'}
             </Typography>
             <Typography variant="caption" sx={{ fontSize: '0.68rem', color: '#1a73e8', fontWeight: 600 }}>
               ETA Forecast

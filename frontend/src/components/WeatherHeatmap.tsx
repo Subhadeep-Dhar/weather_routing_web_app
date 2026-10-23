@@ -69,9 +69,9 @@ export const WeatherHeatmap: React.FC<WeatherHeatmapProps> = ({
           return null;
         }
 
-        const wind = timelineItem ? timelineItem.wind_speed_mph : cp.weather.wind_speed_mph;
-        const rain = timelineItem ? timelineItem.rain_intensity_in_hr : cp.weather.rain_intensity_in_hr;
-        const snow = timelineItem ? timelineItem.snow_intensity_in_hr : cp.weather.snow_intensity_in_hr;
+        const wind = (timelineItem ? timelineItem.wind_speed_mph : cp.weather.wind_speed_mph) ?? 0;
+        const rain = (timelineItem ? timelineItem.rain_intensity_in_hr : cp.weather.rain_intensity_in_hr) ?? 0;
+        const snow = (timelineItem ? timelineItem.snow_intensity_in_hr : cp.weather.snow_intensity_in_hr) ?? 0;
         const segDist = cp.segment_distance_miles || 25;
 
         const { color, fillOpacity, radiusMeters } = getHeatmapColorAndOpacity(

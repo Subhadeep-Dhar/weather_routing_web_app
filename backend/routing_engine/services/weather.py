@@ -4,8 +4,8 @@ Uses batch multi-coordinate queries and aligns each checkpoint's estimated arriv
 """
 
 import requests
-from datetime import datetime, timezone
-from typing import List, Dict, Any
+from datetime import datetime, timezone, timedelta
+from typing import List, Dict, Any, Optional
 from django.core.cache import cache
 from .risk_engine import evaluate_checkpoint_risk
 
@@ -136,10 +136,10 @@ def enrich_checkpoints_with_weather(
         nearest_idx = _find_nearest_hour_index(cp_eta_dt, times) if times else 0
 
         if has_arrays and in_range and nearest_idx < len(winds) and nearest_idx < len(precips) and nearest_idx < len(snows) and nearest_idx < len(temps):
-            wind_val = float(winds[nearest_idx])
-            rain_val = float(precips[nearest_idx])
-            snow_val = float(snows[nearest_idx])
-            temp_val = float(temps[nearest_idx])
+            wind_val: Optional[float] = float(winds[nearest_idx])
+            rain_val: Optional[float] = float(precips[nearest_idx])
+            snow_val: Optional[float] = float(snows[nearest_idx])
+            temp_val: Optional[float] = float(temps[nearest_idx])
             risk_eval = evaluate_checkpoint_risk(wind_val, rain_val, snow_val, cargo_weight_lbs)
 
             effective_risk = risk_eval["effective_risk"]
@@ -156,7 +156,7 @@ def enrich_checkpoints_with_weather(
         else:
             # Forecast is missing, incomplete, or out-of-range -> MUST NOT SILENTLY BECOME LOW RISK
             effective_risk = RiskLevel.UNKNOWN.value
-            risk_score = 0.0
+            risk_score = None
             data_status = "out_of_range" if times else "missing"
             cargo_override = f"Forecast {data_status} at checkpoint ETA"
             hazard_classifications = {
@@ -165,10 +165,10 @@ def enrich_checkpoints_with_weather(
                 "rain": RiskLevel.UNKNOWN.value,
                 "snow": RiskLevel.UNKNOWN.value,
             }
-            wind_val = 0.0
-            rain_val = 0.0
-            snow_val = 0.0
-            temp_val = 0.0
+            wind_val = None
+            rain_val = None
+            snow_val = None
+            temp_val = None
             forecast_ts = "Unavailable"
 
         # Build 0-48h timeline for this checkpoint (enabling instant slider scrubbing on frontend)
@@ -198,20 +198,20 @@ def enrich_checkpoints_with_weather(
                 timeline.append({
                     "hour_offset": h,
                     "timestamp": "Unavailable",
-                    "wind_speed_mph": 0.0,
-                    "rain_intensity_in_hr": 0.0,
-                    "snow_intensity_in_hr": 0.0,
-                    "temperature_f": 0.0,
+                    "wind_speed_mph": None,
+                    "rain_intensity_in_hr": None,
+                    "snow_intensity_in_hr": None,
+                    "temperature_f": None,
                     "effective_risk": RiskLevel.UNKNOWN.value,
-                    "risk_score": 0.0,
+                    "risk_score": None,
                 })
 
         cp_copy = dict(cp)
         cp_copy["weather"] = {
-            "wind_speed_mph": round(wind_val, 1),
-            "rain_intensity_in_hr": round(rain_val, 2),
-            "snow_intensity_in_hr": round(snow_val, 2),
-            "temperature_f": round(temp_val, 1),
+            "wind_speed_mph": round(wind_val, 1) if wind_val is not None else None,
+            "rain_intensity_in_hr": round(rain_val, 2) if rain_val is not None else None,
+            "snow_intensity_in_hr": round(snow_val, 2) if snow_val is not None else None,
+            "temperature_f": round(temp_val, 1) if temp_val is not None else None,
             "forecast_timestamp": forecast_ts,
             "data_status": data_status,
         }

@@ -84,20 +84,28 @@ export const RouteComparison: React.FC<RouteComparisonProps> = ({
                         {isRecommended && (
                           <Chip
                             icon={<StarIcon sx={{ fontSize: '13px !important', color: '#ffffff !important' }} />}
-                            label="RECOMMENDED"
+                            label={route.is_weather_complete ? "RECOMMENDED" : "RECOMMENDED (INCOMPLETE COV)"}
                             size="small"
                             sx={{
                               fontWeight: 700,
                               fontSize: '0.68rem',
-                              backgroundColor: '#137333',
+                              backgroundColor: route.is_weather_complete ? '#137333' : '#b06000',
                               color: '#ffffff',
                             }}
                           />
                         )}
                       </Box>
 
-                      <Typography variant="caption" sx={{ fontWeight: 600, color: '#5f6368' }}>
-                        Avg Risk: {route.average_risk_score.toFixed(2)}
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontWeight: 600,
+                          color: route.average_risk_score !== null ? '#5f6368' : '#d93025',
+                        }}
+                      >
+                        {route.average_risk_score !== null
+                          ? `Avg Risk: ${route.average_risk_score.toFixed(2)}${!route.is_weather_complete ? ` (${route.weather_coverage_pct}% cov)` : ''}`
+                          : 'Avg Risk: N/A (Unknown)'}
                       </Typography>
                     </Box>
 
@@ -194,7 +202,42 @@ export const RouteComparison: React.FC<RouteComparisonProps> = ({
                           }}
                         />
                       </Tooltip>
+
+                      {route.risk_mileage.unknown_miles > 0 && (
+                        <Tooltip title={`Unmonitored Segments: Weather forecast unavailable (${route.weather_coverage_pct}% coverage)`}>
+                          <Chip
+                            label={`Unknown: ${route.risk_mileage.unknown_miles} mi`}
+                            size="small"
+                            sx={{
+                              fontSize: '0.68rem',
+                              fontWeight: 600,
+                              backgroundColor: '#f1f3f4',
+                              color: '#5f6368',
+                              border: '1px dashed #dadce0',
+                            }}
+                          />
+                        </Tooltip>
+                      )}
                     </Box>
+
+                    {/* Incomplete Coverage Alert if present */}
+                    {!route.is_weather_complete && (
+                      <Alert
+                        severity="warning"
+                        icon={<WarningAmberIcon fontSize="inherit" />}
+                        sx={{
+                          py: 0.2,
+                          px: 1,
+                          mb: 1,
+                          fontSize: '0.72rem',
+                          backgroundColor: '#fef7e0',
+                          color: '#b06000',
+                          '& .MuiAlert-icon': { mr: 0.5 },
+                        }}
+                      >
+                        Incomplete weather coverage ({route.weather_coverage_pct}%) — safety cannot be fully evaluated
+                      </Alert>
+                    )}
 
                     {/* No Travel Alert if present */}
                     {route.has_no_travel && (
