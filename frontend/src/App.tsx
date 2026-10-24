@@ -9,6 +9,7 @@ import {
   Typography,
   CircularProgress,
 } from '@mui/material';
+import NavigationIcon from '@mui/icons-material/Navigation';
 import { theme } from './theme';
 import { Header } from './components/Header';
 import { TripForm } from './components/TripForm';
@@ -22,6 +23,8 @@ import type { TripAnalysisRequest, TripAnalysisResponse, Checkpoint } from './ty
 
 export const App: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<TripAnalysisResponse | null>(null);
+  const [lastSubmittedReq, setLastSubmittedReq] = useState<TripAnalysisRequest | null>(null);
+  const [isStale, setIsStale] = useState<boolean>(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string>('');
   const [selectedCheckpoint, setSelectedCheckpoint] = useState<Checkpoint | null>(null);
   const [hourOffset, setHourOffset] = useState<number>(0);
@@ -38,6 +41,8 @@ export const App: React.FC = () => {
   const handleTripSubmit = async (req: TripAnalysisRequest) => {
     setIsLoading(true);
     setErrorMessage(null);
+    setLastSubmittedReq(req);
+    setIsStale(false);
     try {
       const data = await analyzeTrip(req);
       setAnalysisResult(data);
@@ -55,6 +60,12 @@ export const App: React.FC = () => {
       setErrorMessage(msg);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleFormDirty = () => {
+    if (analysisResult) {
+      setIsStale(true);
     }
   };
 
@@ -79,6 +90,7 @@ export const App: React.FC = () => {
                 onSubmit={handleTripSubmit}
                 isLoading={isLoading}
                 errorMessage={errorMessage}
+                onFormDirty={handleFormDirty}
               />
 
               {/* Selected Checkpoint Inspection Card */}
@@ -97,6 +109,46 @@ export const App: React.FC = () => {
 
             {/* Right Map & Analysis Panel */}
             <Grid size={{ xs: 12, lg: 8 }} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* Honest Initial Empty State Card (Before analysis) */}
+              {!analysisResult && (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2.2,
+                    borderRadius: 2.5,
+                    border: '1px solid #c2e7ff',
+                    backgroundColor: '#f8fafd',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: '50%',
+                      backgroundColor: '#e8f0fe',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#1a73e8',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <NavigationIcon fontSize="medium" />
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1a73e8', mb: 0.25 }}>
+                      Ready for Safe Route Analysis
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#5f6368', fontSize: '0.84rem', lineHeight: 1.35 }}>
+                      Default corridor loaded: <strong>Siliguri, West Bengal → Gangtok, Sikkim</strong> (42,000 lb load, 10-mile interval). Click <strong>"Analyze Safe Routes"</strong> to evaluate turn-by-turn geometries, ETA-aligned weather forecasts, and commercial cargo wind overrides.
+                    </Typography>
+                  </Box>
+                </Paper>
+              )}
+
               {/* Route Comparison Options Cards */}
               {analysisResult && (
                 <RouteComparison
@@ -106,6 +158,8 @@ export const App: React.FC = () => {
                     setSelectedRouteId(id);
                     setSelectedCheckpoint(null);
                   }}
+                  isStale={isStale}
+                  onReanalyze={() => lastSubmittedReq && handleTripSubmit(lastSubmittedReq)}
                 />
               )}
 

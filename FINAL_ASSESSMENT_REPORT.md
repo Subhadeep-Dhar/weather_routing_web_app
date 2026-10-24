@@ -136,4 +136,40 @@
 - [x] Cargo-weight override demonstration (>30k lb and >40k lb wind rules).
 - [x] Trip corridor weather heatmap visualization (toggle ON/OFF).
 - [x] 0–48 hour forecast timeline slider with play/pause simulation.
-- [x] Backend test suite execution (`pytest -v` showing 38 passing tests).
+- [x] Backend test suite execution (`pytest -v` showing 58 passing tests).
+
+---
+
+## 10. Pre-Deployment Correctness and Default UX Audit
+
+### A. Default Corridor: Siliguri, West Bengal → Gangtok, Sikkim
+- **Default Origin:** Siliguri, West Bengal, India (`26.7164°N, 88.4310°E`)
+- **Default Destination:** Gangtok, Sikkim, India (`27.3290°N, 88.6123°E`)
+- **Default Cargo Weight:** 42,000 lb (Heavy commercial truck load)
+- **Sampling Frequency:** Every 10 miles (optimal for mountain highway sampling)
+- **Departure Time:** Dynamically initialized to `Current Time + 1 Hour` (never hardcoded or expired)
+
+### B. Initial Map Viewport & Contextual Geometry
+- Removed hardcoded USA center (`[39.8283, -98.5795]`).
+- Default center: `[27.0227, 88.5217]` at zoom level `9`, focusing on Northeast India's Himalayan foothill corridor (NH 10).
+- Before route analysis, the map renders contextual terminal markers for Siliguri and Gangtok, a dashed corridor guide line, and an informative corridor chip.
+- Added `MapResizer` to trigger Leaflet `invalidateSize()` across responsive layout changes.
+
+### C. Honest Initial Empty State & Stale Results Handling
+- On fresh load, stale sample routes, risk numbers, and badges are suppressed.
+- An honest empty-state card welcomes the driver: "Ready for Safe Route Analysis" inviting them to click "Analyze Safe Routes".
+- If the driver modifies any input field (origin, destination, departure time, weight, or interval) after calculating routes, an alert banner immediately flags: **"Trip parameters were changed. Displayed routes reflect previous calculations. Click 'Analyze Safe Routes' to update."**
+
+### D. Routing Engine & Duration Model Audit
+- **Provider & Profile:** Open Source Routing Machine (OSRM) public API (`https://router.project-osrm.org/route/v1/driving`).
+- **Profile Characteristics:** OSRM uses standard passenger car road-speed profiles based on OpenStreetMap highway tags. It does not accept vehicle gross weight or axle load in its query parameters.
+- **Role of Vehicle Weight:** Cargo weight is strictly and exclusively applied in `risk_engine.py` for aerodynamic overturning hazard overrides (`>=55 mph` $\to$ No Travel; `45-54 mph + >30k lb` $\to$ No Travel; `35-44 mph + >40k lb` $\to$ Severe).
+- **Duration Transparency:** Displayed as `~{duration} hrs*` with an explicit tooltip and footnote disclaimer: *"Estimated driving time (general road-routing model). Actual commercial heavy-truck transit times—particularly on mountainous highways such as Siliguri–Gangtok (NH 10)—may vary substantially due to vehicle weight, elevation grades, road conditions, traffic congestion, weather hazards, and local regulations."*
+- **Corridor Sanity Check:** Siliguri to Gangtok road distance is ~69.3 miles (~111.5 km), with 3 distinct physical highway alternatives generated.
+
+### E. Weather & Risk Clarity
+- Arrival-aligned weather sampling at each checkpoint using projected transit ETA.
+- Out-of-range or missing forecasts are explicitly marked `Unknown` (never silently defaulted to `Low`).
+- Average risk is calculated strictly over monitored segments and displays `N/A (Unknown)` when coverage is zero (never `0.00`).
+- Routes with incomplete weather coverage are never badged as "Safest route".
+- Full automated regression test suite: **58 passing tests** in `pytest`.

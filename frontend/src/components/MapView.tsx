@@ -112,6 +112,32 @@ function createTerminalIcon(label: string, color: string): L.DivIcon {
   });
 }
 
+// Auto invalidate size on layout or window resize
+const MapResizer: React.FC = () => {
+  const map = useMap();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+    const handleResize = () => map.invalidateSize();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [map]);
+
+  return null;
+};
+
+// Default corridor coordinates for initial viewport (Siliguri - Gangtok, Northeast India)
+const DEFAULT_CORRIDOR = {
+  center: [27.0227, 88.5217] as [number, number],
+  zoom: 9,
+  siliguri: [26.7164, 88.4310] as [number, number],
+  gangtok: [27.3290, 88.6123] as [number, number],
+};
+
 export const MapView: React.FC<MapViewProps> = ({
   routes,
   selectedRoute,
@@ -122,8 +148,8 @@ export const MapView: React.FC<MapViewProps> = ({
   showHeatmap,
   onToggleHeatmap,
 }) => {
-  const defaultCenter: [number, number] = [39.8283, -98.5795]; // Center of USA
-  const defaultZoom = 4;
+  const defaultCenter = DEFAULT_CORRIDOR.center;
+  const defaultZoom = DEFAULT_CORRIDOR.zoom;
 
   const activeCoordinates = selectedRoute?.geometry?.coordinates || [];
 
@@ -184,8 +210,40 @@ export const MapView: React.FC<MapViewProps> = ({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
+        {/* Automatic map invalidation / resize watcher */}
+        <MapResizer />
+
         {/* Fit Bounds automatically when route coordinates update */}
         {activeCoordinates.length > 0 && <FitRouteBounds coordinates={activeCoordinates} />}
+
+        {/* Empty-state Contextual Corridor Markers (Before analysis) */}
+        {routes.length === 0 && (
+          <>
+            <Marker position={DEFAULT_CORRIDOR.siliguri} icon={createTerminalIcon('ORIGIN: SILIGURI', '#137333')}>
+              <Popup>
+                <strong>Default Origin: Siliguri, West Bengal</strong>
+                <br />
+                <span style={{ fontSize: '11px', color: '#5f6368' }}>Coordinates: 26.7164°N, 88.4310°E</span>
+              </Popup>
+            </Marker>
+            <Marker position={DEFAULT_CORRIDOR.gangtok} icon={createTerminalIcon('DEST: GANGTOK', '#d93025')}>
+              <Popup>
+                <strong>Default Destination: Gangtok, Sikkim</strong>
+                <br />
+                <span style={{ fontSize: '11px', color: '#5f6368' }}>Coordinates: 27.3290°N, 88.6123°E</span>
+              </Popup>
+            </Marker>
+            <Polyline
+              positions={[DEFAULT_CORRIDOR.siliguri, DEFAULT_CORRIDOR.gangtok]}
+              pathOptions={{
+                color: '#1a73e8',
+                weight: 2.5,
+                opacity: 0.7,
+                dashArray: '6, 8',
+              }}
+            />
+          </>
+        )}
 
         {/* Weather Heatmap Corridor Layer */}
         {selectedRoute && (
@@ -310,6 +368,33 @@ export const MapView: React.FC<MapViewProps> = ({
           );
         })}
       </MapContainer>
+
+      {/* Initial Corridor Viewport Info Overlay (empty state) */}
+      {routes.length === 0 && (
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 16,
+            left: 16,
+            zIndex: 1000,
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(4px)',
+            border: '1px solid #dadce0',
+            borderRadius: 2,
+            px: 1.5,
+            py: 1,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+            maxWidth: 380,
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1a73e8', fontSize: '0.85rem' }}>
+            Corridor View: Siliguri → Gangtok
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#5f6368', display: 'block', lineHeight: 1.3 }}>
+            Centered on Northeast India (NH 10 corridor). Click <strong>"Analyze Safe Routes"</strong> to calculate physical road geometries and arrival-forecast hazard levels.
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 };

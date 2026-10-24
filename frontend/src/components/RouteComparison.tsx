@@ -21,17 +21,49 @@ interface RouteComparisonProps {
   routes: RouteItem[];
   selectedRouteId: string;
   onSelectRoute: (routeId: string) => void;
+  isStale?: boolean;
+  onReanalyze?: () => void;
 }
 
 export const RouteComparison: React.FC<RouteComparisonProps> = ({
   routes,
   selectedRouteId,
   onSelectRoute,
+  isStale = false,
+  onReanalyze,
 }) => {
   if (!routes || routes.length === 0) return null;
 
   return (
     <Box sx={{ mb: 2 }}>
+      {/* Parameter change warning banner */}
+      {isStale && (
+        <Alert
+          severity="warning"
+          sx={{
+            mb: 2,
+            fontSize: '0.82rem',
+            alignItems: 'center',
+            backgroundColor: '#fef7e0',
+            border: '1px solid #f9ab00',
+            color: '#7a4100',
+          }}
+          action={
+            onReanalyze ? (
+              <Chip
+                label="Recalculate Routes"
+                color="warning"
+                size="small"
+                onClick={onReanalyze}
+                sx={{ fontWeight: 700, cursor: 'pointer' }}
+              />
+            ) : undefined
+          }
+        >
+          <strong>Trip parameters were changed.</strong> The route options below reflect previous calculations. Click <strong>"Analyze Safe Routes"</strong> to update weather hazard projections.
+        </Alert>
+      )}
+
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
         <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1rem', color: '#202124' }}>
           Evaluated Route Options ({routes.length})
@@ -124,9 +156,11 @@ export const RouteComparison: React.FC<RouteComparisonProps> = ({
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <AccessTimeIcon sx={{ fontSize: 16, color: '#5f6368' }} />
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {route.duration_hours} hrs
-                        </Typography>
+                        <Tooltip title="Estimated driving time (general road-routing model). Actual commercial truck transit time may vary due to vehicle restrictions, road conditions, traffic, weather, stops, and local rules.">
+                          <Typography variant="body2" sx={{ fontWeight: 600, borderBottom: '1px dotted #80868b', cursor: 'help' }}>
+                            ~{route.duration_hours} hrs*
+                          </Typography>
+                        </Tooltip>
                       </Box>
                       <Typography variant="caption" sx={{ color: '#5f6368', ml: 'auto', alignSelf: 'center' }}>
                         {route.checkpoint_count} checks
@@ -283,6 +317,13 @@ export const RouteComparison: React.FC<RouteComparisonProps> = ({
           );
         })}
       </Grid>
+
+      {/* Route model footnote disclaimer */}
+      <Box sx={{ mt: 1.5, px: 0.5 }}>
+        <Typography variant="caption" sx={{ color: '#5f6368', fontSize: '0.72rem', display: 'block', lineHeight: 1.35 }}>
+          *<strong>Estimated driving time (general road-routing model):</strong> Durations are supplied by the routing provider's standard road driving profile. Commercial heavy-truck transit times—particularly on mountainous highways such as the Siliguri–Gangtok corridor (NH 10)—may vary substantially due to vehicle gross weight, steep mountain grades, road conditions, traffic congestion, weather hazards, mandatory driver rest intervals, and local heavy-vehicle restrictions.
+        </Typography>
+      </Box>
     </Box>
   );
 };

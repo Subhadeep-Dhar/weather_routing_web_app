@@ -24,23 +24,25 @@ interface TripFormProps {
   onSubmit: (req: TripAnalysisRequest) => void;
   isLoading: boolean;
   errorMessage: string | null;
+  onFormDirty?: () => void;
 }
 
-export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMessage }) => {
-  const [originInput, setOriginInput] = useState('Chicago, IL');
+export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMessage, onFormDirty }) => {
+  const [originInput, setOriginInput] = useState('Siliguri, West Bengal, India');
   const [originOptions, setOriginOptions] = useState<string[]>([]);
-  const [destInput, setDestInput] = useState('Indianapolis, IN');
+  const [destInput, setDestInput] = useState('Gangtok, Sikkim, India');
   const [destOptions, setDestOptions] = useState<string[]>([]);
 
   // Departure date/time default to current time + 1 hour in local ISO string
   const [departureTime, setDepartureTime] = useState(() => {
     const d = new Date();
+    d.setHours(d.getHours() + 1);
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 16);
   });
 
   const [cargoWeight, setCargoWeight] = useState<number>(42000);
-  const [intervalMiles, setIntervalMiles] = useState<10 | 25 | 50>(25);
+  const [intervalMiles, setIntervalMiles] = useState<10 | 25 | 50>(10);
 
   // Debounced autocomplete for Origin
   useEffect(() => {
@@ -66,12 +68,15 @@ export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMe
     const temp = originInput;
     setOriginInput(destInput);
     setDestInput(temp);
+    if (onFormDirty) onFormDirty();
   };
 
-  const handlePresetTrip = (orig: string, dest: string, weight: number) => {
+  const handlePresetTrip = (orig: string, dest: string, weight: number, interval: 10 | 25 | 50) => {
     setOriginInput(orig);
     setDestInput(dest);
     setCargoWeight(weight);
+    setIntervalMiles(interval);
+    if (onFormDirty) onFormDirty();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -104,16 +109,27 @@ export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMe
         <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.05rem', color: '#202124' }}>
           Plan Truck Route
         </Typography>
-        <Tooltip title="Quick test standard commercial truck routes">
-          <Button
-            size="small"
-            startIcon={<FlashOnIcon fontSize="small" />}
-            onClick={() => handlePresetTrip('Chicago, IL', 'Atlanta, GA', 42000)}
-            sx={{ fontSize: '0.75rem', color: '#1a73e8' }}
-          >
-            Sample Trip
-          </Button>
-        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title="Reset to default corridor: Siliguri → Gangtok">
+            <Button
+              size="small"
+              onClick={() => handlePresetTrip('Siliguri, West Bengal, India', 'Gangtok, Sikkim, India', 42000, 10)}
+              sx={{ fontSize: '0.72rem', color: '#1a73e8', textTransform: 'none' }}
+            >
+              Default (India)
+            </Button>
+          </Tooltip>
+          <Tooltip title="Load sample US highway corridor: Chicago → Indianapolis">
+            <Button
+              size="small"
+              startIcon={<FlashOnIcon fontSize="small" />}
+              onClick={() => handlePresetTrip('Chicago, IL', 'Indianapolis, IN', 42000, 25)}
+              sx={{ fontSize: '0.72rem', color: '#5f6368', textTransform: 'none' }}
+            >
+              Sample US
+            </Button>
+          </Tooltip>
+        </Box>
       </Box>
 
       {errorMessage && (
@@ -129,14 +145,17 @@ export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMe
             freeSolo
             options={originOptions}
             value={originInput}
-            onInputChange={(_, val) => setOriginInput(val)}
+            onInputChange={(_, val) => {
+              setOriginInput(val);
+              if (onFormDirty) onFormDirty();
+            }}
             renderInput={(params) => (
               <TextField
                 {...params}
                 label="Origin Location"
                 size="small"
                 required
-                placeholder="e.g. Chicago, IL or address"
+                placeholder="e.g. Siliguri, West Bengal, India"
               />
             )}
           />
@@ -155,14 +174,17 @@ export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMe
             freeSolo
             options={destOptions}
             value={destInput}
-            onInputChange={(_, val) => setDestInput(val)}
+            onInputChange={(_, val) => {
+              setDestInput(val);
+              if (onFormDirty) onFormDirty();
+            }}
             renderInput={(params) => (
               <TextField
                 {...params}
                 label="Destination Location"
                 size="small"
                 required
-                placeholder="e.g. Atlanta, GA or address"
+                placeholder="e.g. Gangtok, Sikkim, India"
               />
             )}
           />
@@ -176,7 +198,10 @@ export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMe
             size="small"
             fullWidth
             value={departureTime}
-            onChange={(e) => setDepartureTime(e.target.value)}
+            onChange={(e) => {
+              setDepartureTime(e.target.value);
+              if (onFormDirty) onFormDirty();
+            }}
             slotProps={{
               inputLabel: { shrink: true },
             }}
@@ -198,7 +223,10 @@ export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMe
             size="small"
             fullWidth
             value={cargoWeight}
-            onChange={(e) => setCargoWeight(Math.max(0, Number(e.target.value)))}
+            onChange={(e) => {
+              setCargoWeight(Math.max(0, Number(e.target.value)));
+              if (onFormDirty) onFormDirty();
+            }}
             slotProps={{
               htmlInput: { min: 0, max: 120000, step: 1000 },
             }}
@@ -217,7 +245,10 @@ export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMe
                 size="small"
                 variant={cargoWeight === p.weight ? 'filled' : 'outlined'}
                 color={cargoWeight === p.weight ? 'primary' : 'default'}
-                onClick={() => setCargoWeight(p.weight)}
+                onClick={() => {
+                  setCargoWeight(p.weight);
+                  if (onFormDirty) onFormDirty();
+                }}
                 sx={{ fontSize: '0.7rem', cursor: 'pointer' }}
               />
             ))}
@@ -232,7 +263,12 @@ export const TripForm: React.FC<TripFormProps> = ({ onSubmit, isLoading, errorMe
           <ToggleButtonGroup
             value={intervalMiles}
             exclusive
-            onChange={(_, val) => val && setIntervalMiles(val)}
+            onChange={(_, val) => {
+              if (val) {
+                setIntervalMiles(val);
+                if (onFormDirty) onFormDirty();
+              }
+            }}
             size="small"
             fullWidth
           >
