@@ -80,6 +80,21 @@ export interface RouteItem {
   recommendation_reasons: string[];
   is_recommended: boolean;
   rank: number;
+  // Commercial Truck Transit Model & Terrain Metadata
+  duration_raw_osrm_hours?: number;
+  duration_raw_osrm_seconds?: number;
+  duration_truck_hours?: number;
+  duration_truck_seconds?: number;
+  average_truck_speed_mph?: number;
+  average_truck_speed_kmh?: number;
+  raw_implied_car_speed_kmh?: number;
+  terrain_classification?: 'mountain' | 'ghat_corridor' | 'rolling' | 'flat';
+  terrain_label?: string;
+  sinuosity?: number;
+  elevation_span_meters?: number;
+  elevation_delta_meters?: number;
+  model_assumptions?: string[];
+  disclaimer_type?: 'mountain' | 'ghat' | 'rolling' | 'highway';
 }
 
 export interface TripAnalysisRequest {

@@ -10,6 +10,7 @@ from .services.routing import fetch_route_options
 from .services.checkpoints import generate_route_checkpoints
 from .services.weather import enrich_checkpoints_with_weather
 from .services.recommender import calculate_route_metrics, rank_and_recommend_routes
+from .services.truck_eta_model import calculate_defensible_truck_eta
 
 logger = logging.getLogger(__name__)
 
@@ -92,13 +93,32 @@ class TripAnalysisView(APIView):
         for r in raw_routes:
             coords = r["geometry"].get("coordinates", [])
             total_dist = r["distance_miles"]
-            duration_s = r["duration_seconds"]
+            raw_duration_s = r["duration_seconds"]
 
-            # 3. Generate checkpoints along real route geometry
+            # Sample subset of geometry points for elevation profiling
+            sample_step = max(1, len(coords) // 10)
+            ckpt_sample_coords = [(c[1], c[0]) for c in coords[::sample_step]]
+
+            # Calculate defensible commercial truck transit time and terrain profile
+            truck_eta_data = calculate_defensible_truck_eta(
+                distance_miles=total_dist,
+                raw_duration_seconds=raw_duration_s,
+                origin_lat=origin_info["lat"],
+                origin_lon=origin_info["lon"],
+                dest_lat=dest_info["lat"],
+                dest_lon=dest_info["lon"],
+                cargo_weight_lbs=cargo_weight,
+                checkpoint_coords=ckpt_sample_coords,
+            )
+
+            truck_duration_s = truck_eta_data["duration_truck_seconds"]
+            truck_duration_h = truck_eta_data["duration_truck_hours"]
+
+            # 3. Generate checkpoints along real route geometry with realistic commercial truck pacing
             checkpoints = generate_route_checkpoints(
                 coordinates=coords,
                 total_route_distance_miles=total_dist,
-                total_duration_seconds=duration_s,
+                total_duration_seconds=truck_duration_s,
                 departure_time=departure_time,
                 interval_miles=interval_miles,
             )
@@ -115,9 +135,10 @@ class TripAnalysisView(APIView):
                 route_id=r["route_id"],
                 name=r["name"],
                 distance_miles=total_dist,
-                duration_hours=r["duration_hours"],
+                duration_hours=truck_duration_h,
                 checkpoints=enriched_checkpoints,
                 geometry=r["geometry"],
+                truck_eta_data=truck_eta_data,
             )
             processed_routes.append(route_metrics)
 

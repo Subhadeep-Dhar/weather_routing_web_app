@@ -34,6 +34,8 @@ export const RouteComparison: React.FC<RouteComparisonProps> = ({
 }) => {
   if (!routes || routes.length === 0) return null;
 
+  const selectedRoute = routes.find((r) => r.route_id === selectedRouteId) || routes[0];
+
   return (
     <Box sx={{ mb: 2 }}>
       {/* Parameter change warning banner */}
@@ -147,24 +149,69 @@ export const RouteComparison: React.FC<RouteComparisonProps> = ({
                     </Typography>
 
                     {/* Distance & Time */}
-                    <Box sx={{ display: 'flex', gap: 2, mb: 1.5, color: '#3c4043' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box sx={{ display: 'flex', gap: 1.5, mb: 1, color: '#3c4043', alignItems: 'flex-start' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}>
                         <StraightenIcon sx={{ fontSize: 16, color: '#5f6368' }} />
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           {route.distance_miles} mi
                         </Typography>
                       </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <AccessTimeIcon sx={{ fontSize: 16, color: '#5f6368' }} />
-                        <Tooltip title="Estimated driving time (general road-routing model). Actual commercial truck transit time may vary due to vehicle restrictions, road conditions, traffic, weather, stops, and local rules.">
-                          <Typography variant="body2" sx={{ fontWeight: 600, borderBottom: '1px dotted #80868b', cursor: 'help' }}>
-                            ~{route.duration_hours} hrs*
-                          </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+                        <AccessTimeIcon sx={{ fontSize: 16, color: '#1a73e8', mt: 0.2 }} />
+                        <Tooltip
+                          title={
+                            <Box sx={{ p: 0.5 }}>
+                              <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: '#8ab4f8', mb: 0.5 }}>
+                                Heuristic Transit Model Breakdown:
+                              </Typography>
+                              <Typography variant="caption" sx={{ display: 'block' }}>
+                                • <strong>Heuristic Truck ETA:</strong> {route.duration_hours} hrs ({route.average_truck_speed_mph || '~25'} mph avg)
+                              </Typography>
+                              <Typography variant="caption" sx={{ display: 'block' }}>
+                                • <strong>Raw OSRM Car Baseline:</strong> {route.duration_raw_osrm_hours || route.duration_hours} hrs ({route.raw_implied_car_speed_kmh || '~75'} km/h)
+                              </Typography>
+                              <Typography variant="caption" sx={{ display: 'block' }}>
+                                • <strong>Terrain:</strong> {route.terrain_label || 'Standard Highway'} (Elev span: {route.elevation_span_meters ? `${Math.round(route.elevation_span_meters)}m` : '0m'})
+                              </Typography>
+                              {route.model_assumptions && route.model_assumptions.length > 0 && (
+                                <Typography variant="caption" sx={{ display: 'block', fontStyle: 'italic', color: '#dadce0', mt: 0.5 }}>
+                                  Heuristic Rule: {route.model_assumptions[0]}
+                                </Typography>
+                              )}
+                            </Box>
+                          }
+                        >
+                          <Box sx={{ cursor: 'help' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#1a73e8', lineHeight: 1.2 }}>
+                              ~{route.duration_hours} hrs*
+                            </Typography>
+                            {route.duration_raw_osrm_hours && (
+                              <Typography variant="caption" sx={{ color: '#70757a', fontSize: '0.67rem', display: 'block' }}>
+                                (Car: {route.duration_raw_osrm_hours}h)
+                              </Typography>
+                            )}
+                          </Box>
                         </Tooltip>
                       </Box>
-                      <Typography variant="caption" sx={{ color: '#5f6368', ml: 'auto', alignSelf: 'center' }}>
-                        {route.checkpoint_count} checks
-                      </Typography>
+                      <Box sx={{ ml: 'auto', textAlign: 'right' }}>
+                        <Typography variant="caption" sx={{ color: '#5f6368', display: 'block', fontSize: '0.7rem' }}>
+                          {route.checkpoint_count} checks
+                        </Typography>
+                        {route.terrain_label && (
+                          <Chip
+                            label={route.terrain_label.split('/')[0].trim()}
+                            size="small"
+                            sx={{
+                              fontSize: '0.62rem',
+                              height: 18,
+                              backgroundColor: route.terrain_classification === 'mountain' ? '#fef7e0' : route.terrain_classification === 'ghat_corridor' ? '#e8f0fe' : '#f1f3f4',
+                              color: route.terrain_classification === 'mountain' ? '#b06000' : route.terrain_classification === 'ghat_corridor' ? '#1a73e8' : '#5f6368',
+                              fontWeight: 600,
+                              mt: 0.25,
+                            }}
+                          />
+                        )}
+                      </Box>
                     </Box>
 
                     {/* Hazard Breakdown Mileage Chips */}
@@ -318,10 +365,43 @@ export const RouteComparison: React.FC<RouteComparisonProps> = ({
         })}
       </Grid>
 
-      {/* Route model footnote disclaimer */}
+      {/* Contextual Corridor Warning Notice */}
+      {selectedRoute && selectedRoute.terrain_classification === 'mountain' && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon fontSize="small" />}
+          sx={{
+            mt: 1.5,
+            fontSize: '0.78rem',
+            backgroundColor: '#fef7e0',
+            color: '#7a4100',
+            border: '1px solid #f9ab00',
+            '& .MuiAlert-icon': { color: '#b06000' },
+          }}
+        >
+          <strong>Mountain Corridor Notice ({selectedRoute.terrain_label}):</strong> Severe elevation change ({selectedRoute.elevation_span_meters ? `${Math.round(selectedRoute.elevation_span_meters)}m` : 'mountain'} rise) and high sinuosity ({selectedRoute.sinuosity}x). Heuristic transit model governs heavy commercial speed to 20–28 km/h (12–17 mph) for low-gear engine braking and torque limits, with operational buffers for brake-cooling and checkpoint queues.
+        </Alert>
+      )}
+
+      {selectedRoute && selectedRoute.terrain_classification === 'ghat_corridor' && (
+        <Alert
+          severity="info"
+          sx={{
+            mt: 1.5,
+            fontSize: '0.78rem',
+            backgroundColor: '#e8f0fe',
+            color: '#174ea6',
+            border: '1px solid #c2e7ff',
+          }}
+        >
+          <strong>Ghat Pass Corridor Notice ({selectedRoute.terrain_label}):</strong> Route crosses a mountainous pass section ({selectedRoute.elevation_span_meters ? `${Math.round(selectedRoute.elevation_span_meters)}m` : 'ghat'} span). Durations reflect heuristic heavy-vehicle crawl speeds through switchbacks combined with connecting highway cruising.
+        </Alert>
+      )}
+
+      {/* Unified duration transparency footnote */}
       <Box sx={{ mt: 1.5, px: 0.5 }}>
         <Typography variant="caption" sx={{ color: '#5f6368', fontSize: '0.72rem', display: 'block', lineHeight: 1.35 }}>
-          *<strong>Estimated driving time (general road-routing model):</strong> Durations are supplied by the routing provider's standard road driving profile. Commercial heavy-truck transit times—particularly on mountainous highways such as the Siliguri–Gangtok corridor (NH 10)—may vary substantially due to vehicle gross weight, steep mountain grades, road conditions, traffic congestion, weather hazards, mandatory driver rest intervals, and local heavy-vehicle restrictions.
+          *<strong>Heuristic Transit Duration Transparency:</strong> Displays an <em>Estimated Commercial Truck Transit Time</em> derived from transparent heuristic transport engineering assumptions (mountain grade crawl speeds, high sinuosity cornering, fleet speed limiters, and standard commercial rest buffers) alongside the unconstrained <em>OSRM Car Baseline</em>. <em>Observed transit times</em> are not tracked and will vary with live traffic congestion, border inspections, and weather events.
         </Typography>
       </Box>
     </Box>

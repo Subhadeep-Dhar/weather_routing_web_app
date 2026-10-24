@@ -12,7 +12,7 @@ Routes with any No Travel conditions are flagged with has_no_travel=True. Safe r
 are strictly prioritized ahead of No Travel routes.
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from .risk_engine import RiskLevel, RISK_ORDINAL_MAP
 
 
@@ -23,6 +23,7 @@ def calculate_route_metrics(
     duration_hours: float,
     checkpoints: List[Dict[str, Any]],
     geometry: Dict[str, Any],
+    truck_eta_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Aggregates checkpoint risk classifications and segment distances into comprehensive route metrics.
@@ -121,7 +122,7 @@ def calculate_route_metrics(
     else:
         overall_class = RiskLevel.LOW.value
 
-    return {
+    res = {
         "route_id": route_id,
         "name": name,
         "distance_miles": round(distance_miles, 1),
@@ -149,28 +150,62 @@ def calculate_route_metrics(
         "rank": 0,
     }
 
+    if truck_eta_data:
+        res.update({
+            "duration_raw_osrm_hours": truck_eta_data.get("duration_raw_osrm_hours", round(duration_hours, 2)),
+            "duration_raw_osrm_seconds": truck_eta_data.get("duration_raw_osrm_seconds"),
+            "duration_truck_hours": truck_eta_data.get("duration_truck_hours", round(duration_hours, 2)),
+            "duration_truck_seconds": truck_eta_data.get("duration_truck_seconds"),
+            "average_truck_speed_mph": truck_eta_data.get("average_truck_speed_mph"),
+            "average_truck_speed_kmh": truck_eta_data.get("average_truck_speed_kmh"),
+            "raw_implied_car_speed_kmh": truck_eta_data.get("raw_implied_car_speed_kmh"),
+            "terrain_classification": truck_eta_data.get("terrain_classification", "flat"),
+            "terrain_label": truck_eta_data.get("terrain_label", "Standard Highway"),
+            "sinuosity": truck_eta_data.get("sinuosity", 1.0),
+            "elevation_span_meters": truck_eta_data.get("elevation_span_meters", 0.0),
+            "elevation_delta_meters": truck_eta_data.get("elevation_delta_meters", 0.0),
+            "elevation_origin_meters": truck_eta_data.get("elevation_origin_meters"),
+            "elevation_dest_meters": truck_eta_data.get("elevation_dest_meters"),
+            "model_assumptions": truck_eta_data.get("model_assumptions", []),
+            "disclaimer_type": truck_eta_data.get("disclaimer_type", "highway"),
+        })
+    else:
+        res.update({
+            "duration_raw_osrm_hours": round(duration_hours, 2),
+            "duration_truck_hours": round(duration_hours, 2),
+            "terrain_classification": "flat",
+            "terrain_label": "Standard Highway",
+            "sinuosity": 1.0,
+            "elevation_span_meters": 0.0,
+            "elevation_delta_meters": 0.0,
+            "model_assumptions": [],
+            "disclaimer_type": "highway",
+        })
+
+    return res
+
 
 def rank_and_recommend_routes(routes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Ranks routes using strict lexicographical priority order with deterministic Unknown-data policy:
-    1. Primary safety flag: has_no_travel (False < True)
-    2. Fewest Severe miles (ascending)
-    3. Fewest High-risk miles (ascending)
-    4. Completeness of weather coverage (fewest unknown_miles, ascending: complete coverage preferred)
-    5. Lowest average risk over evaluated segments (ascending: None ranked behind evaluated values)
-    6. Shortest travel time (duration_hours)
+    Ranks routes using strict lexicographical priority order from the assessment specification:
+    1. Fewest Severe miles (ascending)
+    2. Fewest High-risk miles (ascending)
+    3. Lowest average risk over evaluated segments (ascending: None ranked behind evaluated values)
+    4. Shortest travel time (duration_hours)
+
+    Safety pre-condition:
+    Routes with No Travel conditions (has_no_travel=True) are placed behind safe routes.
 
     Returns routes sorted from best (rank 1) to worst, with recommendation explanations.
     """
     if not routes:
         return []
 
-    def sort_key(r: Dict[str, Any]) -> Tuple[int, float, float, float, float, float]:
+    def sort_key(r: Dict[str, Any]) -> Tuple[int, float, float, float, float]:
         # Flag 0 for safe (no travel == 0), 1 for unsafe
         safety_flag = 1 if r["has_no_travel"] else 0
         sev = r["risk_mileage"]["severe_miles"]
         high = r["risk_mileage"]["high_miles"]
-        unk = r["risk_mileage"].get("unknown_miles", 0.0)
         # Missing/unmonitored routes must NOT beat monitored routes when hazards are tied.
         # Treat None average_risk_score as 999.0 for sorting.
         avg_risk = (
@@ -179,7 +214,7 @@ def rank_and_recommend_routes(routes: List[Dict[str, Any]]) -> List[Dict[str, An
             else 999.0
         )
         dur = r["duration_hours"]
-        return (safety_flag, sev, high, unk, avg_risk, dur)
+        return (safety_flag, sev, high, avg_risk, dur)
 
     sorted_routes = sorted(routes, key=sort_key)
 
@@ -224,21 +259,23 @@ def rank_and_recommend_routes(routes: List[Dict[str, Any]]) -> List[Dict[str, An
             best = sorted_routes[0]
             sev_diff = r["risk_mileage"]["severe_miles"] - best["risk_mileage"]["severe_miles"]
             high_diff = r["risk_mileage"]["high_miles"] - best["risk_mileage"]["high_miles"]
-            unk_diff = r["risk_mileage"]["unknown_miles"] - best["risk_mileage"]["unknown_miles"]
             dur_diff = r["duration_hours"] - best["duration_hours"]
 
             if sev_diff > 0:
                 reasons.append(f"+{sev_diff:.1f} more Severe miles than recommended route")
             elif high_diff > 0:
                 reasons.append(f"+{high_diff:.1f} more High-risk miles than recommended route")
-            elif unk_diff > 0:
-                reasons.append(f"+{unk_diff:.1f} more unmonitored miles ({r['weather_coverage_pct']}% vs {best['weather_coverage_pct']}%)")
             elif (
                 r["average_risk_score"] is not None
                 and best["average_risk_score"] is not None
                 and r["average_risk_score"] > best["average_risk_score"]
             ):
                 reasons.append(f"Higher average risk score ({r['average_risk_score']:.2f} vs {best['average_risk_score']:.2f})")
+            elif (
+                r["average_risk_score"] is None
+                and best["average_risk_score"] is not None
+            ):
+                reasons.append("Missing forecast data (evaluated routes prioritized)")
             elif dur_diff > 0:
                 reasons.append(f"+{dur_diff:.1f} hrs longer transit time")
             else:

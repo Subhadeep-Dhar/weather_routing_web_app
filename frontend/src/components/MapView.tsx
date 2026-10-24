@@ -388,10 +388,10 @@ export const MapView: React.FC<MapViewProps> = ({
           }}
         >
           <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1a73e8', fontSize: '0.85rem' }}>
-            Corridor View: Siliguri → Gangtok
+            Interactive Route Map
           </Typography>
           <Typography variant="caption" sx={{ color: '#5f6368', display: 'block', lineHeight: 1.3 }}>
-            Centered on Northeast India (NH 10 corridor). Click <strong>"Analyze Safe Routes"</strong> to calculate physical road geometries and arrival-forecast hazard levels.
+            Click <strong>"Analyze Safe Routes"</strong> to calculate physical road geometries, commercial truck pacing, and arrival-forecast hazard levels.
           </Typography>
         </Box>
       )}

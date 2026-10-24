@@ -228,3 +228,64 @@ class TestUnknownWeatherRiskPolicy:
         assert "Lowest risk among evaluated segments" in reasons_text
         assert "Incomplete weather coverage" in reasons_text
         assert "safety cannot be fully evaluated" in reasons_text
+
+    def test_tie_breaking_identical_hazards_lowest_avg_risk_wins(self):
+        # Both routes have 0 Severe and 0 High miles
+        # Route 1: 90 miles Low (1.0), 10 miles Moderate (2.0) -> avg risk 1.10, duration 6.0 hrs
+        # Route 2: 70 miles Low (1.0), 30 miles Moderate (2.0) -> avg risk 1.30, duration 4.0 hrs
+        # Even though Route 2 is 2 hours faster, Route 1 wins on Priority 3 (lowest average risk)!
+        cps1 = [
+            make_checkpoint(0, 0.0, 90.0, RiskLevel.LOW, 1.0),
+            make_checkpoint(1, 90.0, 10.0, RiskLevel.MODERATE, 2.0),
+        ]
+        r1 = calculate_route_metrics("r1", "Low Avg Risk", 100.0, 6.0, cps1, {})
+
+        cps2 = [
+            make_checkpoint(0, 0.0, 70.0, RiskLevel.LOW, 1.0),
+            make_checkpoint(1, 70.0, 30.0, RiskLevel.MODERATE, 2.0),
+        ]
+        r2 = calculate_route_metrics("r2", "Fast But Higher Avg Risk", 100.0, 4.0, cps2, {})
+
+        ranked = rank_and_recommend_routes([r2, r1])
+        assert ranked[0]["route_id"] == "r1"
+        assert ranked[0]["average_risk_score"] < ranked[1]["average_risk_score"]
+        assert ranked[1]["route_id"] == "r2"
+
+    def test_tie_breaking_all_risks_identical_shortest_travel_time_wins(self):
+        # Both routes have 0 Severe, 0 High, and exact same avg risk 1.20
+        # Route A has travel duration 5.0 hrs
+        # Route B has travel duration 4.2 hrs
+        # Priority 4 (Shortest travel time) breaks the tie: Route B wins!
+        cps_a = [
+            make_checkpoint(0, 0.0, 80.0, RiskLevel.LOW, 1.0),
+            make_checkpoint(1, 80.0, 20.0, RiskLevel.MODERATE, 2.0),
+        ]
+        r_a = calculate_route_metrics("r_a", "Route A", 100.0, 5.0, cps_a, {})
+
+        cps_b = [
+            make_checkpoint(0, 0.0, 80.0, RiskLevel.LOW, 1.0),
+            make_checkpoint(1, 80.0, 20.0, RiskLevel.MODERATE, 2.0),
+        ]
+        r_b = calculate_route_metrics("r_b", "Route B", 100.0, 4.2, cps_b, {})
+
+        ranked = rank_and_recommend_routes([r_a, r_b])
+        assert ranked[0]["route_id"] == "r_b"
+        assert ranked[0]["duration_hours"] < ranked[1]["duration_hours"]
+        assert ranked[1]["route_id"] == "r_a"
+
+    def test_unmonitored_route_none_avg_risk_ranks_behind_evaluated_route(self):
+        # Route A: 100% missing forecast (avg_risk is None, 0 severe, 0 high, duration 3.0 hrs)
+        # Route B: 100% monitored (avg_risk 2.0, 0 severe, 0 high, duration 5.0 hrs)
+        # Even though Route A is faster, Route B wins because None avg_risk is treated as 999.0
+        cps_a = [make_checkpoint(0, 0.0, 100.0, RiskLevel.UNKNOWN, None)]
+        r_a = calculate_route_metrics("r_a", "Unmonitored Fast", 100.0, 3.0, cps_a, {})
+
+        cps_b = [make_checkpoint(0, 0.0, 100.0, RiskLevel.MODERATE, 2.0)]
+        r_b = calculate_route_metrics("r_b", "Evaluated Slower", 100.0, 5.0, cps_b, {})
+
+        ranked = rank_and_recommend_routes([r_a, r_b])
+        assert ranked[0]["route_id"] == "r_b"
+        assert ranked[0]["average_risk_score"] == 2.0
+        assert ranked[1]["route_id"] == "r_a"
+        assert ranked[1]["average_risk_score"] is None
+

@@ -4,6 +4,7 @@ from routing_engine.services.geocoding import geocode_address
 from routing_engine.services.routing import METERS_TO_MILES
 from routing_engine.services.risk_engine import evaluate_checkpoint_risk, RiskLevel
 from routing_engine.services.recommender import calculate_route_metrics, rank_and_recommend_routes
+from routing_engine.services.truck_eta_model import calculate_defensible_truck_eta, haversine_distance_miles
 
 
 @pytest.fixture
@@ -218,3 +219,117 @@ class TestPreDeploymentAudit:
         assert abs(top_route["distance_miles"] - sum_cats) <= 0.1, (
             f"Distance reconciliation mismatch: total={top_route['distance_miles']}, sum={sum_cats}"
         )
+
+        # Regression check: Siliguri -> Gangtok must NOT return 1.47 hours!
+        # Modeled truck transit time must be in realistic mountain commercial crawl range (4.5 - 6.5 hours)
+        assert 4.5 <= top_route["duration_hours"] <= 7.0, (
+            f"Implausible truck duration for Siliguri-Gangtok: {top_route['duration_hours']} hrs (expected 4.5-7.0 hrs)"
+        )
+        # Raw OSRM car baseline must be preserved separately for transparency
+        assert "duration_raw_osrm_hours" in top_route
+        assert 1.2 <= top_route["duration_raw_osrm_hours"] <= 2.0, (
+            f"Raw OSRM baseline duration unexpected: {top_route['duration_raw_osrm_hours']} hrs"
+        )
+        # Context-aware disclaimer type must be 'mountain'
+        assert top_route.get("terrain_classification") == "mountain"
+        assert top_route.get("disclaimer_type") == "mountain"
+
+        # Checkpoints ETAs must advance over the modeled truck transit time
+        first_cp = top_route["checkpoints"][0]
+        last_cp = top_route["checkpoints"][-1]
+        assert first_cp["elapsed_hours"] == 0.0
+        assert 4.5 <= last_cp["elapsed_hours"] <= 7.0, (
+            f"Last checkpoint arrival must reflect truck transit duration: {last_cp['elapsed_hours']} hrs"
+        )
+
+    def test_defensible_truck_eta_siliguri_gangtok_regression(self):
+        """
+        Unit regression test for the Siliguri-Gangtok mountain corridor.
+        Tests that high sinuosity and 1500m elevation gain govern truck speeds to 22-25 km/h.
+        """
+        # Distance: ~70 miles (113 km), Raw OSRM: 5293 seconds (1.47 hrs)
+        res = calculate_defensible_truck_eta(
+            distance_miles=70.5,
+            raw_duration_seconds=5293.0,
+            origin_lat=26.7271,
+            origin_lon=88.3953,
+            dest_lat=27.3314,
+            dest_lon=88.6138,
+            cargo_weight_lbs=42000.0,
+        )
+        assert res["duration_raw_osrm_hours"] == 1.47
+        assert 4.8 <= res["duration_truck_hours"] <= 5.5, f"Truck duration out of expected range: {res['duration_truck_hours']} hrs"
+        assert 12.0 <= res["average_truck_speed_mph"] <= 16.0
+        assert 20.0 <= res["average_truck_speed_kmh"] <= 26.0
+        assert res["terrain_classification"] == "mountain"
+        assert res["disclaimer_type"] == "mountain"
+        assert len(res["model_assumptions"]) >= 2
+
+    def test_truck_eta_cargo_weight_governing_rule(self):
+        """
+        Verify that cargo weight adjusts hill-climbing speed and transit time according to documented physics:
+        - Heavy load (>40k lbs): governed to ~24 km/h climb.
+        - Light load (<30k lbs): governed to ~32 km/h climb.
+        """
+        # Test identical mountain geometry with 42,000 lb vs 15,000 lb
+        res_heavy = calculate_defensible_truck_eta(
+            distance_miles=70.0,
+            raw_duration_seconds=5300.0,
+            origin_lat=26.7271,
+            origin_lon=88.3953,
+            dest_lat=27.3314,
+            dest_lon=88.6138,
+            cargo_weight_lbs=42000.0,
+        )
+        res_light = calculate_defensible_truck_eta(
+            distance_miles=70.0,
+            raw_duration_seconds=5300.0,
+            origin_lat=26.7271,
+            origin_lon=88.3953,
+            dest_lat=27.3314,
+            dest_lon=88.6138,
+            cargo_weight_lbs=15000.0,
+        )
+        # Heavy load must take longer than light load on steep grades
+        assert res_heavy["duration_truck_hours"] > res_light["duration_truck_hours"]
+        assert res_heavy["average_truck_speed_kmh"] < res_light["average_truck_speed_kmh"]
+
+    def test_truck_eta_flat_interstate_chicago_indianapolis(self):
+        """
+        Verify that on flat interstate corridors, the model applies fleet speed limiters
+        and standard commercial safety buffers rather than mountain crawl speeds.
+        """
+        res = calculate_defensible_truck_eta(
+            distance_miles=180.0,
+            raw_duration_seconds=10800.0,  # 3.0 hrs (60 mph car baseline)
+            origin_lat=41.8781,
+            origin_lon=-87.6298,
+            dest_lat=39.7684,
+            dest_lon=-86.1581,
+            cargo_weight_lbs=42000.0,
+        )
+        assert res["terrain_classification"] == "flat"
+        assert res["disclaimer_type"] == "highway"
+        # 180 miles at ~55-57 mph governed speed + rest buffer -> ~3.3 - 4.2 hours
+        assert 3.2 <= res["duration_truck_hours"] <= 4.5
+        assert res["average_truck_speed_mph"] >= 40.0
+
+    def test_truck_eta_ghat_corridor_bengaluru_mangaluru(self):
+        """
+        Verify that an inter-city route crossing a mountain pass (e.g. Western Ghats)
+        is classified as ghat_corridor, separating ghat switchback crawl from highway cruising.
+        """
+        res = calculate_defensible_truck_eta(
+            distance_miles=226.7,
+            raw_duration_seconds=17140.0,  # 4.76 hrs car baseline
+            origin_lat=12.9716,
+            origin_lon=77.5946,
+            dest_lat=12.9141,
+            dest_lon=74.8560,
+            cargo_weight_lbs=42000.0,
+        )
+        assert res["terrain_classification"] == "ghat_corridor"
+        assert res["disclaimer_type"] == "ghat"
+        # Real-world truck transit time across Deccan plateau + Shiradi Ghat is 7.5 - 9.0 hrs
+        assert 7.5 <= res["duration_truck_hours"] <= 9.2
+        assert 24.0 <= res["average_truck_speed_mph"] <= 32.0
